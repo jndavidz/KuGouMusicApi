@@ -4,6 +4,8 @@ RUN apk add --no-cache tini
 
 RUN corepack enable
 
+RUN npm config set registry https://registry.npmmirror.com && npm install -g pnpm --force
+
 ENV NODE_ENV=production
 
 WORKDIR /app
