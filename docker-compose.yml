@@ -1,0 +1,18 @@
+
+services:
+  kugou-api:
+    image: kugou-api:latest
+    container_name: kugou-api
+    restart: always
+    network_mode: "host"
+    
+    environment:
+      - NODE_ENV=production
+      # 在这里强制指定端口为数字，防止 .env 解析错误
+      - PORT=3001
+      - platform=lite
+      
+    volumes:
+      # 挂载配置文件，读取 GUID 和 MAC 等身份信息
+      - ./.env:/app/.env
+
