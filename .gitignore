@@ -25,3 +25,5 @@ bin/*
 *.sln
 *.sw?
 .env
+cookies.txt
+
