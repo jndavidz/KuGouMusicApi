@@ -27,3 +27,6 @@ bin/*
 .env
 cookies.txt
 
+# ZCode 会话计划（本地瞬时产物，不跨机、不提交）
+.zcode/plans/
+
