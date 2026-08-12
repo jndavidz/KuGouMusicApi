@@ -2,6 +2,9 @@
 services:
   kugou-api:
     image: kugou-api:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: kugou-api
     restart: always
     network_mode: "host"
@@ -13,6 +16,7 @@ services:
       - platform=lite
       
     volumes:
-      # 挂载配置文件，读取 GUID 和 MAC 等身份信息
-      - ./.env:/app/.env
+      # 挂载凭证目录（/volume2/dev 为 Drive 同步根，PC 侧 D:\dev 有镜像副本）
+      # 凭证唯一权威位置：/volume2/dev/data/api-secrets/kugou_api.env
+      - /volume2/dev/data/api-secrets/kugou_api.env:/app/.env:ro
 

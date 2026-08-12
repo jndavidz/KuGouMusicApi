@@ -1,10 +1,14 @@
 FROM node:lts-alpine
 
-RUN apk add --no-cache tini
+# apk 换国内镜像（阿里云）加速 tini 安装
+RUN sed -i 's|dl-cdn.alpinelinux.org|mirrors.aliyun.com|g' /etc/apk/repositories \
+    && apk add --no-cache tini
 
 RUN corepack enable
 
-RUN npm config set registry https://registry.npmmirror.com && npm install -g pnpm --force
+# 全局写 npm 镜像（对 root 与 node 用户均生效）；锁定 pnpm 版本（与 PC 侧一致）
+# --force 覆盖 corepack enable 创建的 pnpm shim
+RUN npm config --location=global set registry https://registry.npmmirror.com && npm install -g pnpm@11.21.0 --force
 
 ENV NODE_ENV=production
 
