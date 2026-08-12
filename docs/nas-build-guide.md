@@ -125,3 +125,59 @@ services:
 - 容器配置备份：`/volume2/dev/shell/backup_kugou_api_container_*.json`（`docker inspect` 输出）。
 - 镜像：`kugou-api:latest` 每次构建覆盖旧 tag；如需回退，构建时 `docker tag kugou-api:latest kugou-api:v1.6.0` 固定旧版本（tag 住后不算 dangling，`prune` 不会清）。
 - 凭证：`/volume2/dev/data/api-secrets/` 有 Drive 双向备份，PC `D:\dev\data\api-secrets\` 同份。
+
+---
+
+## 附录 A：Docker vs PM2 部署对比（2026-08 实测）
+
+### 实测基线
+
+| 项 | 数据 |
+|---|---|
+| NAS 内存 | 8GB 总量，可用 ~6GB（不紧张） |
+| NAS CPU | Intel Celeron N3060 双核 1.6GHz（低功耗，系统级瓶颈） |
+| kugou-api 容器 | 56MB 内存，CPU 0.00%（idle） |
+| 全部容器合计 | ~1GB（大头：homeassistant 390MB、mariadb 193MB） |
+| Node.js_v22 套件 | 已安装（v22.19.0，`/var/packages/Node.js_v22/target/usr/local/bin/node`） |
+
+### 三维度结论
+
+| 维度 | Docker（现状） | PM2 | 判定 |
+|---|---|---|---|
+| 资源占用 | 56MB（含容器层） | ~50MB node + ~20MB pm2 | **差异 ~10-30MB，8GB 上无感** |
+| 稳定性 | restart:always 天然守护+自启（已验证） | 秒级重启更快，但**自启需手工接线**（pm2 save + DSM 计划任务 bootup resurrect） | **Docker 少一步配置风险** |
+| 速度 | host 网络直连、无 NAT；node24 vs 22 差 <2%；瓶颈在外网 | 相同 | **无实质差异** |
+
+### 结论
+
+**维持 Docker**。三项关注点均不构成切换理由；Docker 生态已跑 10 个容器，守护/自启零配置已闭环。
+
+### PM2 备选接线方案（如未来切换，照此执行）
+
+1. **环境**：Node.js_v22 套件已装（v22.19.0）
+   ```bash
+   NODE=/var/packages/Node.js_v22/target/usr/local/bin/node
+   $NODE -v   # v22.19.0
+   ```
+2. **项目目录**（复用部署目录，仅构建上下文改用途）：
+   ```bash
+   cd /volume2/docker/kugou_api
+   $NODE /path/to/npx pnpm install --prod   # 或用套件 npm 安装依赖
+   ```
+3. **凭证软链接**（保住"凭证唯一位置"原则，不落盘副本）：
+   ```bash
+   ln -s /volume2/dev/data/api-secrets/kugou_api.env /volume2/docker/kugou_api/.env
+   chmod 644 /volume2/dev/data/api-secrets/kugou_api.env
+   ```
+4. **启动与守护**：
+   ```bash
+   PM2_HOME=/root/.pm2 $NODE $(npm root -g)/pm2/bin/pm2 start app.js --name kugou-api
+   PM2_HOME=/root/.pm2 $NODE $(npm root -g)/pm2/bin/pm2 save
+   ```
+5. **开机自启**：DSM 任务计划 → 新建计划任务（root、bootup 触发器）→ 运行命令：
+   ```bash
+   export PM2_HOME=/root/.pm2
+   /var/packages/Node.js_v22/target/usr/local/bin/node <pm2路径> resurrect
+   ```
+6. **日志**：`pm2 logs kugou-api`；**更新**：PC 同步代码后 `pm2 reload kugou-api`
+7. 定时脚本（kugou_refresh / kugou_vip）路径不变，仍调 `127.0.0.1:3001`；端口仍 3001 直连。
