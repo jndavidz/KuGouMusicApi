@@ -164,6 +164,16 @@
 135. [`获取已购单曲`](#获取已购单曲)
 136. [`获取已购专辑`](#获取已购专辑)
 137. [`上传音乐到云盘`](#上传音乐到云盘)
+138. [`获取听歌等级信息`](#获取听歌等级信息)
+139. [`编辑内容黑名单`](#编辑内容黑名单)
+140. [`获取内容黑名单`](#获取内容黑名单)
+141. [`导入外部歌单`](#导入外部歌单)
+142. [`获取歌手单曲（新版）`](#获取歌手单曲新版)
+143. [`组队领取VIP-获取本期活动信息（需要登陆，该接口为测试接口，仅限概念版使用）`](#组队领取VIP-获取本期活动信息需要登陆该接口为测试接口仅限概念版使用)
+144. [`组队领取VIP-获取用户组队信息（需要登陆，该接口为测试接口，仅限概念版使用）`](#组队领取VIP-获取用户组队信息需要登陆该接口为测试接口仅限概念版使用)
+145. [`组队领取VIP-获取用户自己的队伍信息（需要登陆，该接口为测试接口，仅限概念版使用）`](#组队领取VIP-获取用户自己的队伍信息需要登陆该接口为测试接口仅限概念版使用)
+146. [`组队领取VIP-创建用户自己的组队队伍（需要登陆，该接口为测试接口，仅限概念版使用）`](#组队领取VIP-创建用户自己的组队队伍需要登陆该接口为测试接口仅限概念版使用)
+147. [`组队领取VIP-加入组队队伍（需要登陆，该接口为测试接口，仅限概念版使用）`](#组队领取VIP-加入组队队伍需要登陆该接口为测试接口仅限概念版使用)
 
 ### 安装
 
@@ -272,6 +282,14 @@ $ set HOST=127.0.0.1 && npm run dev
 
 #### 更新记录
 
+26-08-17：添加 `编辑内容黑名单`、`获取内容黑名单` 接口
+
+26-08-15：添加 `一起听（音乐室/众乐房）` 接口
+
+26-08-14：`获取社区音效` 接口支持 `sort` 参数排序
+
+26-08-13：添加模块`组队领取VIP`相关接口
+
 26-08-01：添加 `上传音乐到云盘`、`删除用户云盘音乐` 接口
 
 26-05-20：更新曲谱相关接口
@@ -358,6 +376,28 @@ $ set HOST=127.0.0.1 && npm run dev
 
 23-06-22: 密码登录、验证码登录、扫码登录
 
+### 一起听（音乐室/众乐房）
+
+说明：调用此接口可实现酷狗音乐"一起听"（音乐室/众乐房）相关功能，包括房间查询、创建、加入、离开、聊天、播放同步、点歌等。
+
+> ⚠️ 前置条件：需要 `platform=lite`（概念版）模式 + 概念版登录态，`userid`/`token` 需通过 cookie 传递（rmservice 系接口的 userid 必须是数字）
+
+一起听按领域拆为 5 个接口，使用 `operation` 选择领域内操作：
+
+| 能力 | 路由 |
+| --- | --- |
+| 自习室 | `/listen/together/study`：`list/detail/members/configure/sync_player/playlist/request_song` |
+| 众乐房 | `/listen/together/music`：`list/detail/members/initialize/sync_player/playlist/order_song/song_order_list/music_add/remove_song` |
+| 通用房间生命周期 | `/listen/together/room`：`create/join/heartbeat/status/leave/dismiss/check_minor` |
+| 聊天 | `/listen/together/chat`：`send/history` |
+| 发现与频道 | `/listen/together/discovery`：`channel_search` 等公开发现能力 |
+
+查询参数和 JSON body 会在模块入口统一合并，复杂数组（例如 `audios`）建议放入 JSON body。
+
+> ⚠️ **缓存注意事项**：服务端对所有成功响应缓存 2 分钟，缓存键为 hostname + 完整 URL（含 query 参数）。请务必注意：
+>
+> **有副作用的操作**务必在 URL 末尾追加 `timestamp` 参数使每次请求 URL 不同，否则相同 URL 的重复调用会命中缓存，例如：`/listen/together/room?operation=join&timestamp=1691256061923`。
+
 ### 登录
 
 说明：登录有五个接口使用 `encodeURIComponent`对密码编码或者使用 `POST`请求，避免某些特殊字符无法解析,如#(#在 url 中会被识别为 hash,而不是 query)
@@ -392,9 +432,9 @@ $ set HOST=127.0.0.1 && npm run dev
 
 **调用例子：** `/login?username=xxx&password=yyy`
 
-#### 3. 开放接口登录(目前仅支持微信登录)
+#### 3. 微信开放接口登录
 
-说明: 该接口为第三方平台登录，目前仅支持微信登录
+说明: 该接口仅用于微信登录，接收微信扫码成功后生成的 `code`。微信与 QQ 的授权参数不通用，QQ 登录请使用 [`/login/qq`](#_4-qq-授权登录)。
 
 **必选参数：**
 
@@ -404,7 +444,23 @@ $ set HOST=127.0.0.1 && npm run dev
 
 **调用例子：** `/login/openplat?code=xxx`
 
-#### 4. 二维码登录
+#### 4. QQ 授权登录
+
+说明: 该接口仅用于 QQ 登录，接收 QQ 开放平台授权返回的 `openid` 与 `access_token`，并通过酷狗 `login_by_openplat` 换取酷狗登录态。QQ 与微信的授权参数不通用，不能把微信 `code` 传给该接口，也不能把 QQ 参数传给 `/login/openplat`。
+
+**必选参数：**
+
+`openid`: QQ 授权返回的 openid
+
+`access_token`: QQ 授权返回的 access_token
+
+**接口地址：** `/login/qq`
+
+**调用例子：** `/login/qq?openid=xxx&access_token=yyy`
+
+> QQ 登录的 `openid` 与 `access_token` 需通过 QQ 开放平台授权获取（`openmobile.qq.com/oauth2.0/m_authorize`，client_id 按平台自动选择：概念版 `101706348`、标准版 `205141`）。`third_appid` 会根据 `platform` 环境变量自动选择。
+
+#### 5. 二维码登录
 
 说明: 二维码登录涉及到 3 个接口,调用务必带上时间戳,防止缓存
 
@@ -443,9 +499,9 @@ $ set HOST=127.0.0.1 && npm run dev
 
 **调用例子：** `/login/qr/check?key=xxx`
 
-#### 5. 微信登录
+#### 6. 微信扫码登录
 
-说明：微信登录涉及到 2 个接口,调用务必带上时间戳,防止缓存
+说明：微信扫码登录涉及到 2 个接口,调用务必带上时间戳,防止缓存。该流程使用微信的 `uuid` / `wx_code`，不适用于 QQ 扫码登录。
 
 ##### 1. 二维码生成接口
 
@@ -455,10 +511,10 @@ $ set HOST=127.0.0.1 && npm run dev
 
 **调用例子：** `/login/wx/create`
 
-##### 2.二维码检测扫码状态接口
+##### 2. 微信二维码检测扫码状态接口
 
-说明：轮询此接口可获取二维码扫码状态, 408 为等待扫描，404 为已经扫描，403 为拒绝登录，405 为登录成功，402 为已过期(405 状态下登陆完成口会返回 wx_code,
-用于开放登陆 [`/login/openplat`](#_3-开放接口登录目前仅支持微信登录)), 注：该接口有一定延时，不可访问是可以直接到
+说明：轮询微信接口可获取二维码扫码状态, 408 为等待扫描，404 为已经扫描，403 为拒绝登录，405 为登录成功，402 为已过期(405 状态下登陆完成口会返回 wx_code,
+用于开放登陆 [`/login/openplat`](#_3-微信开放接口登录)), 注：该接口有一定延时，不可访问是可以直接到
 https://long.open.weixin.qq.com/connect/l/qrconnect?f=json&uuid=xxx 该接口直接请求
 
 **必选参数：**
@@ -472,6 +528,71 @@ https://long.open.weixin.qq.com/connect/l/qrconnect?f=json&uuid=xxx 该接口直
 **接口地址：** `/login/wx/check`
 
 **调用例子：** `/login/wx/check?timestamp=1691256061923&uuid=xxxxxxxxx`
+
+#### 7. QQ 扫码登录
+
+说明：QQ 扫码登录涉及 2 个接口，同样是“生成二维码 → 轮询扫码状态 → 换取酷狗登录态”的流程，但 QQ 使用 `qrsig` / `ptqrtoken` / `openid` / `access_token`，与微信的 `uuid` / `code` 不通用，也不会请求 `long.open.weixin.qq.com`。
+
+##### 1. 二维码生成接口
+
+说明：调用此接口可生成 QQ 扫码登录二维码，返回二维码图片 base64、qrsig、ptqrtoken 等会话信息
+
+**接口地址：** `/login/qq/qr/create`
+
+**调用例子：** `/login/qq/qr/create`
+
+返回参数说明：
+
+- `qrcode`: 二维码图片 base64（可直接用 `<img src="data:image/png;base64,xxx">` 展示）
+- `qrsig`: 二维码会话标识
+- `ptqrtoken`: qrsig 的 hash33 值
+- `pt_login_sig`: QQ 登录签名
+- `pt_openlogin_data`: xlogin 完整参数（含 h5sig），轮询扫码状态时需要
+- `xlogin_url`: xlogin 接口完整链接（作为轮询请求的 Referer）
+- `cookie`: 会话 Cookie
+
+##### 2. QQ 二维码检测扫码状态接口
+
+说明：轮询 QQ `ptqrlogin` 接口可获取二维码扫码状态，扫码成功后会自动完成酷狗账号登录并返回 token
+
+**必选参数：**
+
+`qrsig`: 由第一个接口生成
+
+`ptqrtoken`: 由第一个接口生成
+
+`pt_login_sig`: 由第一个接口生成
+
+`pt_openlogin_data`: 由第一个接口生成，需原样传递，否则扫码成功后可能无法直接获取 `openid` / `access_token`
+
+`xlogin_url`: 由第一个接口生成（作为轮询请求的 Referer）
+
+`cookie`: 由第一个接口生成，需原样传递（包含 QQ 扫码会话 Cookie，如 `qrsig`）
+
+**可选参数：**
+
+`timestamp`: 建议放在 URL query 中传递（包括 POST 请求），否则由于 2 分钟 URL 缓存会导致延迟
+
+**接口地址：** `/login/qq/qr/check`
+
+**调用例子：** 将 `/login/qq/qr/create` 返回的会话字段通过 GET query 原样传入；`pt_openlogin_data`、`xlogin_url`、`cookie` 需 URL 编码：
+
+```text
+/login/qq/qr/check?timestamp=1691256061923&qrsig=xxx&ptqrtoken=xxx&pt_login_sig=xxx&pt_openlogin_data=xxx&xlogin_url=xxx&cookie=pt_login_sig%3Dxxx%3B%20qrsig%3Dxxx
+```
+
+返回状态说明：
+
+- `wait`: 等待扫码
+- `expired`: 二维码已失效，需重新调用 create 生成
+- `status: 1`: 登录成功，返回酷狗 token（通过 `/login/qq` 相同流程的 login_by_openplat 换取）
+
+> QQ 扫码登录的 `client_id` 按平台自动选择：概念版 `101706348`、标准版 `205141`。
+>
+> 流程说明（与酷狗 App 内 QQ 扫码登录一致）：
+> 1. `m_authorize`（style=qr）→ `xlogin`（获取 pt_login_sig cookie 及 h5sig）→ `ptqrshow`（二维码）
+> 2. 轮询 `ptqrlogin`，需携带 `pt_openlogin_data`（xlogin 完整参数）、`login_sig`、`qrsig` cookie
+> 3. 扫码成功后直接返回 proxy.htm URL（含 openid + access_token），调用 `login_by_openplat` 换取酷狗 token
 
 ### 刷新登录
 
@@ -786,6 +907,22 @@ fileids: 歌单中歌曲的 fileid，可多个,用逗号隔开
 **接口地址：** `/playlist/tracks/del`
 
 **调用例子：** `/playlist/tracks/del?listid=1&fileids=xx` `/playlist/tracks/del?listid=1&fileids=xx,xx`
+
+### 导入外部歌单
+
+说明：登录后调用此接口，可通过外部歌单链接或歌单截图创建酷狗云端导入任务。接口统一使用 `POST /import/playlist`，通过请求体中的 `operation` 区分操作。
+
+HTTP 服务模式存在响应缓存，调用时建议附加变化的 `timestamp` 查询参数，例如 `/import/playlist?timestamp=1691256061923`。
+
+**链接导入**：`operation=add_task`、`task_type=0`、`url=外部歌单链接`。
+
+**截图导入**：先逐张调用 `operation=submit_img`，传入相同的 `task_sn` 与 `img_base64`；上传完成后调用 `operation=add_task`，传入 `task_type=1`、`task_sn`、目标歌单 `listid` 和 `list_name`。`task_sn` 可使用 `userid + 毫秒时间戳`。
+
+**查询任务状态**：`operation=query_task_status`、`ids=[任务 ID]`。状态 `3` 表示成功，状态大于等于 `10` 表示失败，其余状态表示处理中。
+
+**查询导入结果**：`operation=query_task`、`listid=导入后的歌单 ID`，可选 `page`、`pagesize`、`show_missed`。注意这里的 `listid` 是歌单 ID，不是任务 ID。
+
+**查询任务数量**：`operation=task_count`，可选 `classify`（默认 `1`）。
 
 ### 新碟上架
 
@@ -1104,6 +1241,22 @@ fileids: 歌单中歌曲的 fileid，可多个,用逗号隔开
 **接口地址：** `/playlist/effect`
 
 **调用例子：** `/playlist/effect`
+
+### 获取社区音效
+
+说明 : 调用此接口 , 可获取社区音效列表
+
+**可选参数：**
+
+`sort` : 排序方式, 不传默认为 2。实测取值含义: 3 为最热, 4 为最新
+
+`page` : 页数
+
+`pagesize` : 每页页数, 默认为 30
+
+**接口地址：** `/get/model`
+
+**调用例子：** `/get/model?sort=4`
 
 ### 获取歌单详情
 
@@ -2571,6 +2724,217 @@ const res = await fetch('/audio/match', {
 **接口地址：** `/user/purchased/albums`
 
 **调用例子：** `/user/purchased/albums`
+
+### 获取听歌等级信息
+
+说明：获取并上报用户听歌等级信息（听歌时长），登录后调用。支持两种调用方式：
+
+- **查询**（默认）：返回服务器当前累计听歌时长、等级与积分
+- **上报**：传入 `d_sec`（本地累计听歌秒数）与 `diff_sec`（本次新增秒数），同步本地累计时长
+
+**双协议支持**：
+
+- `platform=lite`（概念版）走 **v2 协议**（`userinfo.user.kugou.com/v2/get_grade_info`），上报按 `diff_sec` 累加记账
+- 标准版（不配置 `platform`）走 **v4 协议**（`userinfoservice.kugou.com/v4/get_grade_info`，pk/params 加密结构），**可查询**；但标准版听歌时长由服务端真实播放统计维护，**上报增量不会记账**
+- 可用 `protocol=v2|v4` 参数强制指定协议
+
+**必选参数（登录态）：**
+
+`cookie`：登录凭证，需包含 `token`、`userid`，建议同时包含 `mid`、`dfid`
+
+**可选参数：**
+
+`uuid`：设备 UUID，默认为 `-`
+
+`type`：类型，默认为 `1`（仅 v2 生效；v4 固定为 `0`）
+
+**上报参数：**
+
+`d_sec`：本地累计听歌秒数（须大于等于服务器当前值）
+
+`diff_sec`：本次新增秒数，请按正常听歌节奏调用
+
+`y_type`：年份类型，默认为 `0`
+
+`m_type`：音乐类型，默认为 `0`
+
+**接口地址：** `/user/grade/info`
+
+**调用例子：**
+
+查询：`/user/grade/info?cookie=token%3Dxxx%3Buserid%3D123`
+
+上报：`/user/grade/info?cookie=token%3Dxxx%3Buserid%3D123&d_sec=123456&diff_sec=600&uuid=xxx`
+
+**返回示例：**
+
+```json
+{
+  "status": 1,
+  "error_code": 0,
+  "data": {
+    "d_sec": 125755,
+    "duration": 2095,
+    "p_grade": 3,
+    "p_current_point": 3809,
+    "p_grade_point": 3000,
+    "p_next_grade": 4,
+    "p_next_grade_point": 6000,
+    "servertime": "2026-08-05 23:10:40"
+  }
+}
+```
+
+### 编辑内容黑名单
+
+说明：登录后调用此接口，可以添加/移除内容黑名单中的歌曲或歌手（黑名单内容不会出现在猜你喜欢、每日推荐等推荐场景中）
+
+**必选参数：**
+
+歌曲（`label=song`，默认）：
+
+`hash`: 歌曲 hash（FileHash）
+
+歌手（`label=singer`）：
+
+`singerid`: 歌手 ID
+
+**可选参数：**
+
+`name`: 显示名（歌曲为 `歌手 - 歌名`，歌手为歌手名），仅用于客户端展示，可省略
+
+`mixsongid`: 歌曲 MixSongID（`label=song` 时建议传入，用于客户端展示与跳转）
+
+`label`: 黑名单类型，`song`（歌曲，默认）或 `singer`（歌手）
+
+`isDelete`: 传 `1` 时为从黑名单移除，不传或传 `0` 为添加
+
+`items`: 批量条目（JSON 数组字符串，`[{"k":"...","v":"..."}]` 结构，传入时忽略上述单条参数）
+
+`moduleId`: 场景标识（KG-TID），默认 473（黑名单管理），可选 474（猜你喜欢）、18（每日推荐）、30（主题歌单）
+
+**接口地址：** `/blacklist`
+
+**调用例子：** `/blacklist?hash=B3A52A7A958BF0AED0EBFBA2E9A818B7&mixsongid=32100650&name=周杰伦 - 晴天`（添加歌曲），
+`/blacklist?label=singer&singerid=3520&name=周杰伦`（添加歌手），
+`/blacklist?label=singer&singerid=3520&name=周杰伦&isDelete=1`（移除歌手）
+
+**返回示例：**
+
+```json
+{ "status": 1, "error_code": 0, "data": "操作成功" }
+```
+
+### 获取内容黑名单
+
+说明：登录后调用此接口，可以获取内容黑名单中的歌曲或歌手列表
+
+**可选参数：**
+
+`label`: 黑名单类型，`song`（歌曲，默认）或 `singer`（歌手）
+
+`page`: 页数，默认为 1
+
+`pagesize`: 每页页数，默认为 30，上限 500（条目总数为返回的 `total`，可翻页获取全量）
+
+`moduleId`: 场景标识（KG-TID），默认 473（黑名单管理），可选 474（猜你喜欢）、18（每日推荐）、30（主题歌单）
+
+**接口地址：** `/blacklist/list`
+
+**调用例子：** `/blacklist/list`，`/blacklist/list?label=singer&page=1&pagesize=100`
+
+**返回示例：**
+
+```json
+{
+  "status": 1,
+  "error_code": 0,
+  "data": {
+    "label": "song",
+    "source": 3,
+    "page": 1,
+    "pagesize": 30,
+    "total": 1,
+    "items": [
+      {
+        "song_k": "b3a52a7a958bf0aed0ebfba2e9a818b7",
+        "song_v": "{\"n\":\"周杰伦 - 晴天\",\"m\":\"32100650\",\"t\":\"1786957745\"}",
+        "t": 1786957745
+      }
+    ]
+  }
+}
+```
+
+### 获取歌手单曲（新版）
+
+说明 : 调用此接口 , 传入歌手 id, 可获得歌手歌曲（新版接口），每条歌曲带作者列表（`authors`），支持多歌手。
+
+**必选参数：**
+
+`id`： 歌手 id
+
+**可选参数：**
+
+`page`： 页码
+
+`pagesize`: 每页页数, 默认为 30（**上限 100**，超过返回 `error_code=20010`）
+
+`sort`: 排序，hot : 热门, new: 最新
+
+**接口地址：** `/artist/audios/new`
+
+**调用例子：** `/artist/audios/new?id=6539`
+
+### 组队领取VIP-获取本期活动信息（需要登陆，该接口为测试接口，仅限概念版使用）
+
+说明：登录后调用此接口，可以获取本次组队活动信息
+
+**接口地址**：  `/team/period/info`
+
+**调用例子**：  `/team/period/info`
+
+### 组队领取VIP-获取用户组队信息（需要登陆，该接口为测试接口，仅限概念版使用）
+
+说明：登录后调用此接口，可以获取用户组队信息，比如是否加入队伍或自己创建队伍
+
+必选参数：`period_id`：本期活动信息返回的`id`字段
+
+**接口地址**： `/team/my/status`
+
+**调用例子**： `/team/my/status?period_id=280`
+
+### 组队领取VIP-获取用户自己的队伍信息（需要登陆，该接口为测试接口，仅限概念版使用）
+
+说明：登录后调用此接口，可以获取用户自己组建的队伍信息
+
+必选参数：`period_id`：本期活动信息返回的`id`字段
+
+**接口地址**：  `/team/my/info`
+
+**调用例子**：  `/team/my/info?period_id=280`
+
+### 组队领取VIP-创建用户自己的组队队伍（需要登陆，该接口为测试接口，仅限概念版使用）
+
+说明：登录后调用此接口，可以创建用户自己的组队队伍获取vip
+
+必选参数：`period_id`：本期活动信息返回的`id`字段
+
+**接口地址**： `/team/my`
+
+**调用例子**： `/team/my?period_id=280`
+
+### 组队领取VIP-加入组队队伍（需要登陆，该接口为测试接口，仅限概念版使用）
+
+说明：登录后调用此接口，可以加入别人的组队队伍
+
+必选参数：`team_code`：欲加入队伍的组队码
+
+**接口地址**：  `/team/join`
+
+**调用例子**： `/team/join?team_code=j9n0fd`
+
+
 
 ## License
 
