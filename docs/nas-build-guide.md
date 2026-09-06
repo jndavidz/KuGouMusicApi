@@ -1,184 +1,114 @@
-# 群晖 NAS 上用源码构建 kugou-api 镜像 — 环境与需求指南
+# kugou-api NAS 部署指南
 
-> 适用范围：NAS（群晖 DSM 7.2+ / Container Manager）上用本地源码构建并运行 kugou-api 容器。
-> 文中实测值取自本机 NAS（2026-08-12 验证；含 pnpm 两侧升级、Dockerfile 源优化、compose build 段修复后的状态）。
+> NAS：群晖 DS416play（DSM 7.3.2，x86_64）。运行形态：Docker 容器（曾对比过 PM2，结论维持 Docker，见 git 历史）。
 
----
-
-## 1. 架构概览（三项分离）
+## 1. 架构与路径权威表
 
 | 角色 | 位置 | 说明 |
 |---|---|---|
 | 代码唯一源头 | PC `D:\repos\kugou_api`（git，zxs 分支） | 开发、merge 上游、版本管理都在这里 |
-| NAS 部署副本 | `/volume2/docker/kugou_api` | 仅作为 docker build 输入（构建上下文），**非 Drive 同步区**，不含凭证 |
-| 凭证权威位置 | `/volume2/dev/data/api-secrets/musicAPI/kugou_api.env` | Drive 双向同步 ↔ PC `D:\dev\data\api-secrets\musicAPI\`，容器以 `:ro` 挂载（2026-09-03 起凭证归档进 `musicAPI/` 子目录） |
-| 定时脚本 | `scripts/kugou_refresh.sh` `scripts/kugou_vip.sh` | 仓库内版本管理；NAS 上部署于 `/volume2/dev/shell/bin/`，DSM 任务计划调用 |
+| NAS 部署副本 | `/volume2/docker/kugou_api` | docker build 输入（构建上下文），**非 Drive 同步区**，不含凭证 |
+| 凭证权威位置 | `/volume2/dev/data/api-secrets/musicAPI/` | Drive 双向同步 ↔ PC `D:\dev\data\api-secrets\musicAPI\`；容器以 `:ro` 挂载其中的 `kugou_api.env` |
+| 定时脚本 | 仓库 `scripts/`（权威源）；NAS 运行副本 `/volume2/dev/shell/bin/` | DSM 任务计划调用的是运行副本 |
 
-> ⚠️ **不要**把代码放进 `/volume2/dev`（Drive 同步根），否则会被双向镜像回 PC `D:\dev`，污染非代码区。
-> ⚠️ NAS 部署目录由 `deploy.sh` 每次 **清空重建**（`rm -rf`），保证与 PC 仓库精确镜像、无残留模块。
+**凭证文件清单**（均在 `musicAPI/` 下）：
 
----
-
-## 2. 宿主机环境需求（NAS 侧）
-
-| 项 | 实测值 | 要求 |
-|---|---|---|
-| 系统 | DSM 7.3.2-86009 | DSM 7.2+（Container Manager 要求） |
-| Docker 套件 | Container Manager（新版） | 已安装且运行 |
-| docker CLI | 24.0.2（`/usr/local/bin/docker`） | 默认不在 PATH，用全路径 |
-| docker compose | v2.20.1 | 插件形式 `docker compose` |
-| 操作权限 | `zxsadmin` 在 `docker` 组 | 免 sudo 操作 docker |
-| 磁盘 | `/volume2` 空闲 191G | 实际需求 <2GB |
-
-**磁盘估算**：kugou-api 镜像 ~297MB + node:lts-alpine 基础层 + pnpm 依赖层 + BuildKit 缓存 ≈ **<2GB**。
-
----
-
-## 3. 源码内容（构建上下文）
-
-部署目录 `/volume2/docker/kugou_api` 必须包含（由 `deploy.sh` 维护）：
-
-- `Dockerfile`、`package.json`、`pnpm-lock.yaml`（**严格锁定依赖版本**）
-- 运行时：`app.js`、`server.js`、`main.js`、`index.js`、`module/`（168 个 API 模块）、`util/`、`public/`
-- `docker-compose.yml`（含 **`build:` 段**，见第 6 节）
-- `.dockerignore`（控制 COPY 范围，阻止 `.git`/`.env`/`cookies.txt` 打进镜像）
-
-**传输时排除**（deploy.sh 已内置）：`.git`、`.zcode`、`node_modules`、`cookies.txt`、`.env`、`.env.example`（敏感凭证不进 NAS 部署目录）。
-
----
-
-## 4. 网络需求（构建过程）
-
-| 目标 | 用途 | 状态 | 备注 |
+| 文件 | 用途 | 写方 | 读方 |
 |---|---|---|---|
-| `registry.npmmirror.com` | pnpm 依赖安装 | ✅ | Dockerfile 内 `pnpm config set registry`（node 用户） |
-| `registry.npmmirror.com` | npm 全局 registry | ✅ | Dockerfile 内 `npm config --location=global set registry`（**全用户生效**） |
-| `mirrors.aliyun.com` | apk 安装 tini | ✅ | 已换阿里云源（原官方源国内慢） |
-| github.com | 构建不需要 | ❌ 仅 25KB/s | 仅源码同步可能用到，走内网替代 |
+| `kugou_api.env` | 容器 `/app/.env`（设备身份、platform） | 手动维护 | 容器 |
+| `kugou_cookie_header.txt` | 登录态 Cookie 种子 | `kugou_refresh.sh` 写回 | `kugou_refresh.sh` |
+| `kugou_token.json` | 三项核心凭证（token/userid/dfid/t1） | `kugou_refresh.sh` 写回 | `kugou_vip.sh` |
+| `kugou_token.txt` | Netscape 格式副本 | `kugou_refresh.sh` 写回 | 备用 |
+| `netease_cookie.txt` | 网易云 Cookie | `netease_refresh.sh` | netease 脚本（**路径未迁移，暂缓**，见 §5） |
 
-> 构建全程只走国内镜像源（npmmirror + 阿里云），不碰 github.com。
+> ⚠️ **定时脚本双副本**：`deploy.sh` 只覆盖 `/volume2/docker/kugou_api/scripts/`，**不会**更新 `/volume2/dev/shell/bin/` 运行副本。改了 `scripts/*.sh` 必须手动同步运行副本（`scp -O` 覆盖），否则 DSM 计划任务跑的还是旧逻辑。
+> ⚠️ 代码勿放 `/volume2/dev`（Drive 同步根会镜像回 PC）；NAS 部署目录由 `deploy.sh` 每次 `rm -rf` 清空重建。
 
----
+## 2. 环境需求（NAS 侧）
 
-## 5. 镜像内构建环境（由 Dockerfile 决定）
-
-| 项 | 实测值 |
+| 项 | 值 |
 |---|---|
-| 基础镜像 | `node:lts-alpine`（当前 lts = node **v24.15.0**，160MB，amd64） |
-| 包管理器 | pnpm **11.21.0**（`npm install -g pnpm@11.21.0 --force` **锁定**，PC 侧同版本） |
-| 依赖安装 | `pnpm install --prod --frozen-lockfile`（生产依赖，严格按 lockfile） |
-| 进程管理 | tini（`ENTRYPOINT ["/sbin/tini","--"]`） |
-| 启动 | `node app.js` → 监听 3001 |
-| 端口/网络 | `PORT=3001`，compose `network_mode: "host"` |
+| 系统 | DSM 7.3.2-86009 |
+| Docker | 24.0.2（`/usr/local/bin/docker`，不在 PATH，用全路径），compose v2.20.1 |
+| 权限 | `zxsadmin` 在 docker 组，免 sudo |
+| 磁盘 | 镜像 ~400MB，合计 <2GB |
 
-**依赖锁定要求**：merge 上游后若 `package.json` 依赖变化，必须先更新 `pnpm-lock.yaml`：
-```bash
-# PC 侧（pnpm 11.21.0 与 NAS 一致，便携目录 D:\PortableApps\_sys\node\npm_global）
-pnpm install --lockfile-only
-```
-`deploy.sh` 会自动做一次 `--frozen-lockfile --lockfile-only` 校验拦截不一致。
+## 3. 构建与部署
 
----
-
-## 6. 构建与更新流程（deploy.sh 一键）
+### 路线 A：deploy.sh（NAS 构建）
 
 ```bash
-# PC 端（Git Bash），一条命令完成全部：
+# PC 端（Git Bash）
 cd /d/repos/kugou_api && ./deploy.sh
 ```
 
-deploy.sh 内部三步：
-1. **lockfile 校验**（PC 有 pnpm 时）：`pnpm install --frozen-lockfile --lockfile-only`，不一致即中止；
-2. **传输 + 构建**：`tar`（排除敏感/无关项）→ ssh 到 NAS → `chmod 644` 凭证文件（**幂等修复 ACL**，防 Drive 重置）→ `rm -rf` 清空部署目录 → 解压 → `docker compose up -d --build`；
-3. **验证**：`curl http://10.10.10.2:3001/` 期望 200 + `/login/token` 探活（确认凭证/设备身份链路生效，防止"假正常"）。
+内部流程：lockfile 校验（`--frozen-lockfile --lockfile-only` 不一致即中止）→ tar 传输（排除 `.git`/`node_modules`/凭证）→ NAS 上 `chmod 644` 凭证 + 清空部署目录 + 解压 + `docker compose up -d --build` → 验证 3001 端口与 `/login/token` 链路。
 
-**⚠️ 关键前提：`docker-compose.yml` 必须含 `build:` 段**，否则 `--build` 被忽略、代码改动永远不进镜像：
+适用：NAS 构建慢（N3060 双核），适合小改动或无 PC 侧 docker 时的兜底。
 
-```yaml
-services:
-  kugou-api:
-    image: kugou-api:latest
-    build:               # ← 缺了它，"重建"只是用旧镜像重启
-      context: .
-      dockerfile: Dockerfile
+### 路线 B：WSL 构建直传（推荐）
+
+WSL 与 NAS 同为 x86_64，镜像直接可用；构建快、不给 NAS 施压。
+
+```bash
+# 1. WSL 仓库根构建（buildx activity 权限异常时加 DOCKER_BUILDKIT=0）
+DOCKER_BUILDKIT=0 docker build -t kugou-api:latest .
+
+# 2. 流式传输并 load（不落盘中间文件，384MB 镜像秒级~十秒级）
+docker save kugou-api:latest | gzip | \
+  ssh zxsadmin@10.10.10.2 '/usr/local/bin/docker load'
+
+# 3. NAS 用新镜像 + 新 compose 重建容器
+ssh zxsadmin@10.10.10.2 'cd /volume2/docker/kugou_api && /usr/local/bin/docker compose up -d --no-build'
 ```
 
-**正常更新耗时**：依赖不变时层缓存命中 → 秒级；依赖变更 → 1-3 分钟（pnpm install 走 npmmirror）。
+**收尾必做**（Drive 同步可能重置 ACL，容器内 `.env` 变 `000`）：
 
----
+```bash
+ssh zxsadmin@10.10.10.2 'chmod 644 /volume2/dev/data/api-secrets/musicAPI/kugou_api.env && /usr/local/bin/docker restart kugou-api'
+```
 
-## 7. 已知坑与故障排查
+**验证**：`curl http://10.10.10.2:3001/` 期望 200；`/login/token?cookie=<header 文件内容>` 返回 `t1` 即凭证链路生效。
 
-1. **compose 缺 `build:` 段**（最隐蔽）：`--build` 不报错、容器照常 Running，但镜像从不重建。已修复；改动 compose 后务必验证镜像 `Created` 时间刷新（`docker image inspect kugou-api:latest`）。
-2. **`corepack enable` 与 `npm install -g pnpm` 冲突（EEXIST）**：corepack 先占用了 `/usr/local/bin/pnpm`，npm 全局安装必须加 `--force` 覆盖。
-3. **凭证 ACL 权限坑**：挂载的 `kugou_api.env` 若被 Drive 同步重置 ACL，容器内 `/app/.env` 变 `000`，node 用户（uid 1000）读不到 → 服务照常启动但**设备身份加载失败（登录态失效）**。修复：`chmod 644 /volume2/dev/data/api-secrets/musicAPI/kugou_api.env && docker restart kugou-api`。**deploy.sh 每次部署已内置幂等 chmod 防御**。
-4. **凭证路径漂移坑（2026-09-04 实录）**：凭证被归档进 `musicAPI/` 子目录后，compose 挂载源与脚本内硬编码路径全部失效——容器重启报 `Bind mount failed`，定时脚本报 `找不到 kugou_token.json`。修复：同步更新 `docker-compose.yml`、`deploy.sh`、`scripts/kugou_refresh.sh`、`scripts/kugou_vip.sh` 四处路径引用。
-4. **`--frozen-lockfile` 失败**：lockfile 与 package.json 不一致 → PC 上 `pnpm install --lockfile-only` 更新后重新部署。
-5. **构建缓存被清**：NAS 上有计划任务 `Docker_Auto_Prune`，已改为
-   `docker image prune -f && docker builder prune -f --filter until=168h`（保留 7 天构建缓存；只清 dangling 镜像，不动停止的容器）。
-6. **部署目录放非同步区**：必须 `/volume2/docker/...`，不要放 `/volume2/dev`（会同步回 PC `D:\dev`）。
-7. **构建超时/网络失败**：检查 npmmirror/阿里云可达性；确属缓存污染可 `docker compose build --no-cache`（明显更慢，慎用）。
+> NAS 的 SFTP 子系统不可用（chroot 限制），scp 必须带 `-O` 走传统协议。
 
----
+## 4. VIP 自动领取与 Cookie 刷新链路
 
-## 8. 回退方案
+DSM 任务计划（root）每日调度，脚本调 `127.0.0.1:3001`：
 
-- 容器配置备份：`/volume2/dev/shell/backup_kugou_api_container_*.json`（`docker inspect` 输出）。
-- 镜像：`kugou-api:latest` 每次构建覆盖旧 tag；如需回退，构建时 `docker tag kugou-api:latest kugou-api:v1.6.0` 固定旧版本（tag 住后不算 dangling，`prune` 不会清）。
-- 凭证：`/volume2/dev/data/api-secrets/musicAPI/` 有 Drive 双向备份，PC `D:\dev\data\api-secrets\musicAPI\` 同份。
+| 时间 | 脚本 | 动作 |
+|---|---|---|
+| 08:30 | `kugou_refresh.sh` | 用旧 Cookie 调 `/login/token` 刷新，写回三个凭证文件 |
+| 08:40 | `kugou_vip.sh` | 领取当日畅听 VIP（`/youth/day/vip`）→ 等 5 分钟 → 升级（`/youth/day/vip/upgrade`）→ 查询月记录与权益报告 |
 
----
+日志：`/volume2/dev/shell/logs/kugou_refresh.log`、`kugou_vip.log`。
 
-## 附录 A：Docker vs PM2 部署对比（2026-08 实测）
+**error_code 语义**：
 
-### 实测基线
-
-| 项 | 数据 |
+| code | 含义 |
 |---|---|
-| NAS 内存 | 8GB 总量，可用 ~6GB（不紧张） |
-| NAS CPU | Intel Celeron N3060 双核 1.6GHz（低功耗，系统级瓶颈） |
-| kugou-api 容器 | 56MB 内存，CPU 0.00%（idle） |
-| 全部容器合计 | ~1GB（大头：homeassistant 390MB、mariadb 193MB） |
-| Node.js_v22 套件 | 已安装（v22.19.0，`/var/packages/Node.js_v22/target/usr/local/bin/node`） |
+| 131001 | 今日畅听 VIP 已领取过（正常） |
+| 297002 | 今日升级奖励已领取过（正常） |
+| 20010 | 请求参数无效（检查 Cookie 组装格式：`token;userid;dfid` 核心三项） |
+| 空响应/空 code | 酷狗接口异常，当天漏领，次日自动继续 |
 
-### 三维度结论
+## 5. 已知坑速查
 
-| 维度 | Docker（现状） | PM2 | 判定 |
-|---|---|---|---|
-| 资源占用 | 56MB（含容器层） | ~50MB node + ~20MB pm2 | **差异 ~10-30MB，8GB 上无感** |
-| 稳定性 | restart:always 天然守护+自启（已验证） | 秒级重启更快，但**自启需手工接线**（pm2 save + DSM 计划任务 bootup resurrect） | **Docker 少一步配置风险** |
-| 速度 | host 网络直连、无 NAT；node24 vs 22 差 <2%；瓶颈在外网 | 相同 | **无实质差异** |
+| # | 现象 | 处理 |
+|---|---|---|
+| 1 | 容器启动报 `Bind mount failed` | compose 挂载源（`docker-compose.yml` volumes）指向的凭证文件不存在——核对 `musicAPI/` 路径 |
+| 2 | 服务起了但登录态失效，容器内 `/app/.env` 权限 `000` | `chmod 644 .../musicAPI/kugou_api.env && docker restart kugou-api`（路线 A 的 deploy.sh 已内置幂等 chmod） |
+| 3 | 定时脚本报 `找不到 kugou_token.json` / `找不到 kugou_cookie_header.txt` | `/volume2/dev/shell/bin/` 运行副本路径过期，从仓库 `scripts/` 同步（scp -O） |
+| 4 | Container Manager UI 报"容器undefined不存在"或显示旧状态 | CLI 重建容器后 UI 缓存失步：套件中心重启 Container Manager 即同步；确认实际状态用 `docker ps` |
+| 5 | WSL `docker build` 报 buildx activity permission denied | `DOCKER_BUILDKIT=0 docker build ...` 走传统 builder |
+| 6 | `scp` 报 `No such file or directory` | NAS SFTP 子系统不可用，加 `-O` |
+| 7 | compose 改了但镜像不更新 | compose 必须含 `build:` 段（现文件已有）；`up -d` 默认不重建镜像，代码变更走路线 A `--build` 或路线 B 重传 |
+| 8 | `npm install -g pnpm` EEXIST | corepack 占用 shim，加 `--force`（Dockerfile 已内置） |
+| 9 | `--frozen-lockfile` 失败 | PC 上 `pnpm install --lockfile-only` 更新 lockfile 后重新部署 |
+| 10 | netease 链路（周三 08:25 `netease_refresh.sh`）失败 | **已知待办**：netease 脚本路径仍指旧 `api-secrets/` 根目录，cookie 文件已在 `musicAPI/` 下，按用户要求暂缓迁移 |
 
-### 结论
+## 6. 回退方案
 
-**维持 Docker**。三项关注点均不构成切换理由；Docker 生态已跑 10 个容器，守护/自启零配置已闭环。
-
-### PM2 备选接线方案（如未来切换，照此执行）
-
-1. **环境**：Node.js_v22 套件已装（v22.19.0）
-   ```bash
-   NODE=/var/packages/Node.js_v22/target/usr/local/bin/node
-   $NODE -v   # v22.19.0
-   ```
-2. **项目目录**（复用部署目录，仅构建上下文改用途）：
-   ```bash
-   cd /volume2/docker/kugou_api
-   $NODE /path/to/npx pnpm install --prod   # 或用套件 npm 安装依赖
-   ```
-3. **凭证软链接**（保住"凭证唯一位置"原则，不落盘副本）：
-   ```bash
-   ln -s /volume2/dev/data/api-secrets/musicAPI/kugou_api.env /volume2/docker/kugou_api/.env
-   chmod 644 /volume2/dev/data/api-secrets/musicAPI/kugou_api.env
-   ```
-4. **启动与守护**：
-   ```bash
-   PM2_HOME=/root/.pm2 $NODE $(npm root -g)/pm2/bin/pm2 start app.js --name kugou-api
-   PM2_HOME=/root/.pm2 $NODE $(npm root -g)/pm2/bin/pm2 save
-   ```
-5. **开机自启**：DSM 任务计划 → 新建计划任务（root、bootup 触发器）→ 运行命令：
-   ```bash
-   export PM2_HOME=/root/.pm2
-   /var/packages/Node.js_v22/target/usr/local/bin/node <pm2路径> resurrect
-   ```
-6. **日志**：`pm2 logs kugou-api`；**更新**：PC 同步代码后 `pm2 reload kugou-api`
-7. 定时脚本（kugou_refresh / kugou_vip）路径不变，仍调 `127.0.0.1:3001`；端口仍 3001 直连。
+- 容器配置：`/volume2/dev/shell/backup_kugou_api_container_*.json`（`docker inspect` 备份）。
+- 镜像版本：`docker tag kugou-api:latest kugou-api:vX` 固定旧版（tag 后不算 dangling，prune 不清）。
+- 凭证：`musicAPI/` 有 Drive 双向同步备份（NAS ↔ PC）。
