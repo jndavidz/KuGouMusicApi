@@ -11,7 +11,7 @@
 |---|---|---|
 | 代码唯一源头 | PC `D:\repos\kugou_api`（git，zxs 分支） | 开发、merge 上游、版本管理都在这里 |
 | NAS 部署副本 | `/volume2/docker/kugou_api` | 仅作为 docker build 输入（构建上下文），**非 Drive 同步区**，不含凭证 |
-| 凭证权威位置 | `/volume2/dev/data/api-secrets/kugou_api.env` | Drive 双向同步 ↔ PC `D:\dev\data\api-secrets\`，容器以 `:ro` 挂载 |
+| 凭证权威位置 | `/volume2/dev/data/api-secrets/musicAPI/kugou_api.env` | Drive 双向同步 ↔ PC `D:\dev\data\api-secrets\musicAPI\`，容器以 `:ro` 挂载（2026-09-03 起凭证归档进 `musicAPI/` 子目录） |
 | 定时脚本 | `scripts/kugou_refresh.sh` `scripts/kugou_vip.sh` | 仓库内版本管理；NAS 上部署于 `/volume2/dev/shell/bin/`，DSM 任务计划调用 |
 
 > ⚠️ **不要**把代码放进 `/volume2/dev`（Drive 同步根），否则会被双向镜像回 PC `D:\dev`，污染非代码区。
@@ -111,7 +111,8 @@ services:
 
 1. **compose 缺 `build:` 段**（最隐蔽）：`--build` 不报错、容器照常 Running，但镜像从不重建。已修复；改动 compose 后务必验证镜像 `Created` 时间刷新（`docker image inspect kugou-api:latest`）。
 2. **`corepack enable` 与 `npm install -g pnpm` 冲突（EEXIST）**：corepack 先占用了 `/usr/local/bin/pnpm`，npm 全局安装必须加 `--force` 覆盖。
-3. **凭证 ACL 权限坑**：挂载的 `kugou_api.env` 若被 Drive 同步重置 ACL，容器内 `/app/.env` 变 `000`，node 用户（uid 1000）读不到 → 服务照常启动但**设备身份加载失败（登录态失效）**。修复：`chmod 644 /volume2/dev/data/api-secrets/kugou_api.env && docker restart kugou-api`。**deploy.sh 每次部署已内置幂等 chmod 防御**。
+3. **凭证 ACL 权限坑**：挂载的 `kugou_api.env` 若被 Drive 同步重置 ACL，容器内 `/app/.env` 变 `000`，node 用户（uid 1000）读不到 → 服务照常启动但**设备身份加载失败（登录态失效）**。修复：`chmod 644 /volume2/dev/data/api-secrets/musicAPI/kugou_api.env && docker restart kugou-api`。**deploy.sh 每次部署已内置幂等 chmod 防御**。
+4. **凭证路径漂移坑（2026-09-04 实录）**：凭证被归档进 `musicAPI/` 子目录后，compose 挂载源与脚本内硬编码路径全部失效——容器重启报 `Bind mount failed`，定时脚本报 `找不到 kugou_token.json`。修复：同步更新 `docker-compose.yml`、`deploy.sh`、`scripts/kugou_refresh.sh`、`scripts/kugou_vip.sh` 四处路径引用。
 4. **`--frozen-lockfile` 失败**：lockfile 与 package.json 不一致 → PC 上 `pnpm install --lockfile-only` 更新后重新部署。
 5. **构建缓存被清**：NAS 上有计划任务 `Docker_Auto_Prune`，已改为
    `docker image prune -f && docker builder prune -f --filter until=168h`（保留 7 天构建缓存；只清 dangling 镜像，不动停止的容器）。
@@ -124,7 +125,7 @@ services:
 
 - 容器配置备份：`/volume2/dev/shell/backup_kugou_api_container_*.json`（`docker inspect` 输出）。
 - 镜像：`kugou-api:latest` 每次构建覆盖旧 tag；如需回退，构建时 `docker tag kugou-api:latest kugou-api:v1.6.0` 固定旧版本（tag 住后不算 dangling，`prune` 不会清）。
-- 凭证：`/volume2/dev/data/api-secrets/` 有 Drive 双向备份，PC `D:\dev\data\api-secrets\` 同份。
+- 凭证：`/volume2/dev/data/api-secrets/musicAPI/` 有 Drive 双向备份，PC `D:\dev\data\api-secrets\musicAPI\` 同份。
 
 ---
 
@@ -166,8 +167,8 @@ services:
    ```
 3. **凭证软链接**（保住"凭证唯一位置"原则，不落盘副本）：
    ```bash
-   ln -s /volume2/dev/data/api-secrets/kugou_api.env /volume2/docker/kugou_api/.env
-   chmod 644 /volume2/dev/data/api-secrets/kugou_api.env
+   ln -s /volume2/dev/data/api-secrets/musicAPI/kugou_api.env /volume2/docker/kugou_api/.env
+   chmod 644 /volume2/dev/data/api-secrets/musicAPI/kugou_api.env
    ```
 4. **启动与守护**：
    ```bash

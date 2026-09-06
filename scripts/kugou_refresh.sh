@@ -4,9 +4,9 @@
 # ==========================================
 
 API_URL="http://127.0.0.1:3001"
-H_FILE="/volume2/dev/data/api-secrets/kugou_cookie_header.txt"
-J_FILE="/volume2/dev/data/api-secrets/kugou_token.json"
-T_FILE="/volume2/dev/data/api-secrets/kugou_token.txt"
+H_FILE="/volume2/dev/data/api-secrets/musicAPI/kugou_cookie_header.txt"
+J_FILE="/volume2/dev/data/api-secrets/musicAPI/kugou_token.json"
+T_FILE="/volume2/dev/data/api-secrets/musicAPI/kugou_token.txt"
 LOG="/volume2/dev/shell/logs/kugou_refresh.log"
 
 now() { date "+%Y-%m-%d %H:%M:%S"; }

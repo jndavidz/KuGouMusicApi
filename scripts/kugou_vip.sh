@@ -4,7 +4,7 @@
 # ==========================================
 
 API_URL="http://127.0.0.1:3001"
-TOKEN_FILE="/volume2/dev/data/api-secrets/kugou_token.json"
+TOKEN_FILE="/volume2/dev/data/api-secrets/musicAPI/kugou_token.json"
 LOG_FILE="/volume2/dev/shell/logs/kugou_vip.log"
 BARK_URL=""
 

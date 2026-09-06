@@ -17,6 +17,7 @@ services:
       
     volumes:
       # 挂载凭证目录（/volume2/dev 为 Drive 同步根，PC 侧 D:\dev 有镜像副本）
-      # 凭证唯一权威位置：/volume2/dev/data/api-secrets/kugou_api.env
-      - /volume2/dev/data/api-secrets/kugou_api.env:/app/.env:ro
+      # 凭证唯一权威位置：/volume2/dev/data/api-secrets/musicAPI/kugou_api.env
+      # （2026-09-03 凭证按项目归档进 musicAPI/ 子目录，Drive 双向同步，旧根路径已废弃）
+      - /volume2/dev/data/api-secrets/musicAPI/kugou_api.env:/app/.env:ro
 

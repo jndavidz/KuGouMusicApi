@@ -42,7 +42,7 @@ tar --exclude=.git --exclude=.zcode --exclude=node_modules \
     -cf - . | \
   ssh -o BatchMode=yes zxsadmin@10.10.10.2 \
     'set -e; \
-     chmod 644 /volume2/dev/data/api-secrets/kugou_api.env; \
+     chmod 644 /volume2/dev/data/api-secrets/musicAPI/kugou_api.env; \
      rm -rf /volume2/docker/kugou_api && mkdir -p /volume2/docker/kugou_api && \
      tar -xf - -C /volume2/docker/kugou_api && \
      cd /volume2/docker/kugou_api && /usr/local/bin/docker compose up -d --build'
@@ -51,7 +51,7 @@ tar --exclude=.git --exclude=.zcode --exclude=node_modules \
 echo ">>> [3/3] 验证服务与凭证链路 ..."
 sleep 2
 curl -s -o /dev/null -w "    http://10.10.10.2:3001/ -> HTTP %{http_code}\n" --max-time 5 http://10.10.10.2:3001/
-CK=$(cat /d/dev/data/api-secrets/kugou_cookie_header.txt | tr -d '\r\n ')
+CK=$(cat /d/dev/data/api-secrets/musicAPI/kugou_cookie_header.txt | tr -d '\r\n ')
 T1=$(curl -s --max-time 10 "http://10.10.10.2:3001/login/token?cookie=${CK}" | grep -o '"t1":"[^"]*"' | head -1)
 if [ -n "$T1" ]; then
   echo "    /login/token -> OK (凭证链路生效)"
