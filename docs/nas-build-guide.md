@@ -19,7 +19,7 @@
 | `kugou_cookie_header.txt` | 登录态 Cookie 种子 | `kugou_refresh.sh` 写回 | `kugou_refresh.sh` |
 | `kugou_token.json` | 三项核心凭证（token/userid/dfid/t1） | `kugou_refresh.sh` 写回 | `kugou_vip.sh` |
 | `kugou_token.txt` | Netscape 格式副本 | `kugou_refresh.sh` 写回 | 备用 |
-| `netease_cookie.txt` | 网易云 Cookie | `netease_refresh.sh`（周三 08:25） | netease 脚本 |
+| `netease_cookie.txt` | 网易云 Cookie | `netease_refresh.sh`（每周五 08:25；刷新前自动备份到 backup/） | netease 脚本（已入库 scripts/） |
 
 > ⚠️ **定时脚本双副本**：`deploy.sh` 只覆盖 `/volume2/docker/kugou_api/scripts/`，**不会**更新 `/volume2/dev/shell/bin/` 运行副本。改了 `scripts/*.sh` 必须手动同步运行副本（`scp -O` 覆盖），否则 DSM 计划任务跑的还是旧逻辑。
 > ⚠️ 代码勿放 `/volume2/dev`（Drive 同步根会镜像回 PC）；NAS 部署目录由 `deploy.sh` 每次 `rm -rf` 清空重建。
@@ -80,7 +80,7 @@ DSM 任务计划（root）每日调度，脚本调 `127.0.0.1:3001`：
 |---|---|---|
 | 08:30 | `kugou_refresh.sh` | 用旧 Cookie 调 `/login/token` 刷新，写回三个凭证文件 |
 | 08:40 | `kugou_vip.sh` | 领取当日畅听 VIP（`/youth/day/vip`）→ 等 5 分钟 → 升级（`/youth/day/vip/upgrade`）→ 查询月记录与权益报告 |
-| 周三 08:25 | `netease_refresh.sh` | 调 ncm-api `/login/refresh` 刷新网易云 Cookie；**每次刷新前自动备份**当前文件到 `/volume2/dev/data/api-secrets/backup/`（时间戳命名，Drive 同步 ↔ PC `D:\dev\data\api-secrets\backup\`） |
+| **每周五** 08:25 | `netease_refresh.sh` | 调 ncm-api `/login/refresh` 刷新网易云 Cookie；**每次刷新前自动备份**当前文件到 `/volume2/dev/data/api-secrets/backup/`（时间戳命名，Drive 同步 ↔ PC `D:\dev\data\api-secrets\backup\`） |
 
 日志：`/volume2/dev/shell/logs/kugou_refresh.log`、`kugou_vip.log`。
 
