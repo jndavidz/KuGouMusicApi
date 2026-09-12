@@ -31,6 +31,8 @@ fi
 COOKIE="token=${TOKEN};userid=${USERID};dfid=${DFID}"
 
 CURRENT_DATE=$(date '+%Y-%m-%d')
+# 仅取 "当前年月" 前缀，避免把历史月份的签到记录也数进本月统计
+CURRENT_MONTH=$(date '+%Y-%m')
 
 log "======================================="
 log "开始执行概念版 VIP 领取流程 (核心模式)"
@@ -71,7 +73,7 @@ fi
 RECORD_RESP=$(curl -s "${API_URL}/youth/month/vip/record?cookie=${COOKIE}")
 UNION_RESP=$(curl -s "${API_URL}/youth/union/vip?cookie=${COOKIE}")
 
-COUNT=$(echo "$RECORD_RESP" | grep -o '"day":"[^"]*"' | grep -c '[^ ]' 2>/dev/null || echo 0)
+COUNT=$(echo "$RECORD_RESP" | grep -o '"day":"[^"]*"' | grep -c "${CURRENT_MONTH}-" 2>/dev/null || echo 0)
 SVIP_END=$(echo "$UNION_RESP" | grep -o '"product_type":"svip"[^}]*"vip_end_time":"[^"]*"' | grep -o '"vip_end_time":"[^"]*"' | cut -d'"' -f4)
 TVIP_END=$(echo "$UNION_RESP" | grep -o '"product_type":"tvip"[^}]*"vip_end_time":"[^"]*"' | grep -o '"vip_end_time":"[^"]*"' | cut -d'"' -f4)
 
