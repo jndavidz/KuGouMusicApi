@@ -23,7 +23,7 @@ if [ -z "$CURRENT_COOKIE" ]; then
     exit 1
 fi
 
-# 1.5 刷新前备份当前 Cookie（时间戳命名；目录在 Drive 同步区，自动镜像至 PC D:\dev\data\api-secrets\backup）
+# 1.5 刷新前备份当前 Cookie（时间戳命名；目录在 Drive 同步区，自动镜像至 PC D:\_work\dev\data\api-secrets\backup）
 mkdir -p "$BACKUP_DIR"
 BAK_FILE="$BACKUP_DIR/netease_cookie.txt.bak-$(date +%Y%m%d-%H%M%S)"
 cp -p "$COOKIE_FILE" "$BAK_FILE" && log "已备份当前 Cookie -> $BAK_FILE"

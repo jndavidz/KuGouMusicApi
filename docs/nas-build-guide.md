@@ -6,9 +6,9 @@
 
 | 角色 | 位置 | 说明 |
 |---|---|---|
-| 代码唯一源头 | PC `D:\repos\kugou_api`（git，zxs 分支） | 开发、merge 上游、版本管理都在这里 |
+| 代码唯一源头 | PC `D:\_work\repos\kugou_api`（git，zxs 分支） | 开发、merge 上游、版本管理都在这里 |
 | NAS 部署副本 | `/volume2/docker/kugou_api` | docker build 输入（构建上下文），**非 Drive 同步区**，不含凭证 |
-| 凭证权威位置 | `/volume2/dev/data/api-secrets/musicAPI/` | Drive 双向同步 ↔ PC `D:\dev\data\api-secrets\musicAPI\`；容器以 `:ro` 挂载其中的 `kugou_api.env` |
+| 凭证权威位置 | `/volume2/dev/data/api-secrets/musicAPI/` | Drive 双向同步 ↔ PC `D:\_work\dev\data\api-secrets\musicAPI\`；容器以 `:ro` 挂载其中的 `kugou_api.env` |
 | 定时脚本 | 仓库 `scripts/`（权威源）；NAS 运行副本 `/volume2/dev/shell/bin/` | DSM 任务计划调用的是运行副本 |
 
 **凭证文件清单**（均在 `musicAPI/` 下）：
@@ -80,7 +80,7 @@ DSM 任务计划（root）每日调度，脚本调 `127.0.0.1:3001`：
 |---|---|---|
 | 08:30 | `kugou_refresh.sh` | 用旧 Cookie 调 `/login/token` 刷新，写回三个凭证文件 |
 | 08:40 | `kugou_vip.sh` | 领取当日畅听 VIP（`/youth/day/vip`）→ 等 5 分钟 → 升级（`/youth/day/vip/upgrade`）→ 查询月记录与权益报告 |
-| **每周五** 08:25 | `netease_refresh.sh` | 调 ncm-api `/login/refresh` 刷新网易云 Cookie；**每次刷新前自动备份**当前文件到 `/volume2/dev/data/api-secrets/backup/`（时间戳命名，Drive 同步 ↔ PC `D:\dev\data\api-secrets\backup\`） |
+| **每周五** 08:25 | `netease_refresh.sh` | 调 ncm-api `/login/refresh` 刷新网易云 Cookie；**每次刷新前自动备份**当前文件到 `/volume2/dev/data/api-secrets/backup/`（时间戳命名，Drive 同步 ↔ PC `D:\_work\dev\data\api-secrets\backup\`） |
 
 日志：`/volume2/dev/shell/logs/kugou_refresh.log`、`kugou_vip.log`。
 
