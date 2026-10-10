@@ -1,5 +1,23 @@
-# 强制 LF：Windows 检出 CRLF 会破坏 bash 脚本与 Dockerfile RUN 命令
+# 行尾与二进制规则（2026-10-11 补）
+#
+# 本仓是 KugouMusicApi（Node/TS）。既有 4 行规则（.sh/Dockerfile/*.yml）是**对的**
+# ——Docker RUN 里引用的 shell 脚本若被 Windows 检出成 CRLF，会在容器里报
+# `exec format error` / `\r: not found`。本次只做扩展，不改动原有四行。
+#
+# 现有 1 个 CRLF 文件：module/user_info.js（历史既存），刻意不为 *.js 声明 eol。
+
 *.sh        text eol=lf
 Dockerfile  text eol=lf
 *.yml       text eol=lf
 *.yaml      text eol=lf
+# ---- 以下为本次新增 ----
+*.ts        text eol=lf
+*.md        text eol=lf
+*.json      text eol=lf
+*.gitignore text eol=lf
+*.dockerignore text eol=lf
+# ⚠ 不声明 *.js / *.html（存量 CRLF 所在类）
+
+# ---- 二进制 ----
+*.png   binary
+*.wasm  binary
