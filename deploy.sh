@@ -10,7 +10,7 @@
 # 使用: ./deploy.sh
 set -euo pipefail
 
-cd /d/repos/kugou_api
+cd /d/_work/repos/kugou_api
 
 # ── [1/3] 校验 pnpm-lock.yaml 与 package.json 一致性（可选）──
 # merge 上游后若 package.json 变更但 lockfile 未同步, NAS 构建会因
@@ -51,7 +51,7 @@ tar --exclude=.git --exclude=.zcode --exclude=node_modules \
 echo ">>> [3/3] 验证服务与凭证链路 ..."
 sleep 2
 curl -s -o /dev/null -w "    http://10.10.10.2:3001/ -> HTTP %{http_code}\n" --max-time 5 http://10.10.10.2:3001/
-CK=$(cat /d/dev/data/api-secrets/musicAPI/kugou_cookie_header.txt | tr -d '\r\n ')
+CK=$(cat /d/_work/dev/data/api-secrets/musicAPI/kugou_cookie_header.txt | tr -d '\r\n ')
 T1=$(curl -s --max-time 10 "http://10.10.10.2:3001/login/token?cookie=${CK}" | grep -o '"t1":"[^"]*"' | head -1)
 if [ -n "$T1" ]; then
   echo "    /login/token -> OK (凭证链路生效)"
